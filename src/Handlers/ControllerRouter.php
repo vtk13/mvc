@@ -1,61 +1,81 @@
 <?php
 namespace Vtk13\Mvc\Handlers;
 
+use Vtk13\Mvc\Exception\RouteNotFoundException;
 use Vtk13\Mvc\Http\IRequest;
 
 class ControllerRouter implements IHandler
 {
-    protected $namespace, $path;
+    protected $namespace, $pathPrefix;
 
     /**
      * @var string
      */
     protected $defaultController;
 
-    public function __construct($namespace = '', $path = '/', $defaultController = 'index')
+    public function __construct($namespace = '', $pathPrefix = '/', $defaultController = 'index')
     {
+        if ($namespace && substr($namespace, -1) != '\\') {
+            throw new \Exception("Namespace {$namespace} must end with '\\'");
+        }
         $this->namespace = $namespace;
-        $this->path = $path;
+        $this->pathPrefix = $pathPrefix;
         $this->defaultController = $defaultController;
     }
 
     protected function parsePath($path)
     {
         // trim path prefix
-        $path = preg_replace("~^{$this->path}~", '', $path);
+        $path = preg_replace("~^{$this->pathPrefix}~", '', $path);
         $path = trim($path, '/');
-        $parts = explode('/', $path);
-        foreach ($parts as $k => $v) {
-            // decode UTF-8 chars
-            $parts[$k] = urldecode($v);
+        if ($path === '') {
+            return [];
+        } else {
+            $parts = explode('/', $path);
+            foreach ($parts as $k => $v) {
+                // decode UTF-8 chars
+                $parts[$k] = urldecode($v);
+            }
+            return $parts;
         }
-        $parts[0] = empty($parts[0]) ? $this->defaultController : strtolower(str_replace('-', '_', $parts[0]));
-        return $parts;
     }
 
     /**
-     * @param $namespace
-     * @param $controller
-     * @return AbstractController
+     * @param string $namespace
+     * @param string $controller
+     * @return AbstractController|null
      */
     protected function controllerFactory($namespace, $controller)
     {
-        $className = ($namespace ? $namespace . '\\' : '') . ucfirst($controller) . 'Controller';
+        // translate some-name to SomeName
+        $controller = implode('', array_map('ucfirst', explode('-', $controller)));
+
+        $className = $namespace . $controller . 'Controller';
         if (class_exists($className)) {
             return new $className();
         } else {
-            $className = ($namespace ? $namespace . '\\' : '') . ucfirst($this->defaultController) . 'Controller';
-            return new $className();
+            return null;
         }
     }
 
     public function handle(IRequest $request)
     {
-        if (strpos($request->getPath(), $this->path) !== 0) {
+        if (strpos($request->getPath(), $this->pathPrefix) !== 0) {
             return null;
         }
+
         $params = $this->parsePath($request->getPath());
-        $controller = $this->controllerFactory($this->namespace, $params[0]);
-        return $controller->handle($request, $params, $this->path);
+        // if no controller specified - use default controller.
+        // This help distinct default controller and invalid controller
+        $controllerName = isset($params[0]) ? array_shift($params) : $this->defaultController;
+
+        $controller = $this->controllerFactory($this->namespace, $controllerName);
+        if ($controller) {
+            return $controller->handle($request, $params, $this->pathPrefix);
+        } else {
+            // no controller found, use default controller to handle 404 error
+            $controller = $this->controllerFactory($this->namespace, $this->defaultController);
+            return $controller->handleError(404, new RouteNotFoundException("Controller '{$controllerName}' not found"));
+        }
     }
 }

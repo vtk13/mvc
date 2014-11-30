@@ -33,25 +33,19 @@ class AbstractController implements IHandler
     {
         $this->request = $request;
 
-        $name = isset($params[0]) ? array_shift($params) : $this->name;
         try {
-            if ($name != $this->name) {
-                $res = $this->handleError(404, new RouteNotFoundException("Controller {$name} not found"));
-                $action = '404';
-            } else {
-                $action = isset($params[0]) ? array_shift($params) : $this->defaultAction;
-                $action = str_replace('-', '_', $action);
+            $action = isset($params[0]) ? array_shift($params) : $this->defaultAction;
+            // translate some-name to SomeName
+            $actionName = implode('', array_map('ucfirst', explode('-', $action)));
 
+            $call = array($this, $actionName . $request->getMethod());
+            if (is_callable($call)) {
                 $res = $this->beforeHandle($action, $params);
                 if ($res === null) {
-                    $call = array($this, $action . $request->getMethod());
-                    if (is_callable($call)) {
-                        $res = call_user_func_array($call, $params);
-                    } else {
-                        $ex = new RouteNotFoundException("Action {$name}::{$action} not found");
-                        $res = $this->handleError(404, $ex);
-                    }
+                    $res = call_user_func_array($call, $params);
                 }
+            } else {
+                $res = $this->handleError(404, new RouteNotFoundException("Action {$this->name}::{$actionName} not found"));
             }
         } catch (Exception $ex) {
             $res = $this->handleError(500, $ex);
@@ -71,11 +65,11 @@ class AbstractController implements IHandler
      * @param Exception $ex
      * @return IResponse
      */
-    protected function handleError($code, Exception $ex)
+    public function handleError($code, Exception $ex)
     {
         switch ($code) {
             case 404:
-                return new Response('Not Found', 404);
+                return new Response($ex->getMessage(), $code);
             default:
                 return new Response($ex->getMessage(), 500);
         }
