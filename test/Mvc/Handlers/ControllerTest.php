@@ -1,4 +1,5 @@
 <?php
+use Vtk13\Mvc\Handlers\IHandler;
 use Vtk13\Mvc\Http\JsonpResponse;
 use Vtk13\Mvc\Http\JsonResponse;
 use Vtk13\Mvc\Http\RedirectResponse;
@@ -46,27 +47,46 @@ class IndexController extends AbstractController
 
 class ControllerTestClass extends PHPUnit_Framework_TestCase
 {
+    /**
+     * @var IHandler
+     */
+    protected $router;
+
+    protected function setUp()
+    {
+        $builder = new \DI\ContainerBuilder();
+        $builder->useAnnotations(true);
+        $builder->addDefinitions([
+            Twig_Environment::class => function() {
+                $loader = new Twig_Loader_Filesystem(realpath(__DIR__ . '/../../templates'));
+                return new Twig_Environment($loader, array(
+                    'cache' => 'test/template_cache',
+                    'auto_reload' => true,
+                ));
+            }
+        ]);
+
+        $this->router = new ControllerRouter($builder->build());
+    }
+
     public function testIndexAction()
     {
         $request = new Request();
-        $router = new ControllerRouter();
-        $response = $router->handle($request);
+        $response = $this->router->handle($request);
         $this->assertEquals('index', $response->getBody());
     }
 
     public function testTemplateAction()
     {
         $request = new Request(null, '/index/template');
-        $router = new ControllerRouter();
-        $response = $router->handle($request);
-        $this->assertEquals('template', $response->getBody());
+        $response = $this->router->handle($request);
+        $this->assertEquals("header\ntemplate\n", $response->getBody());
     }
 
     public function testRedirectResponse()
     {
         $request = new Request(null, '/index/redirect');
-        $router = new ControllerRouter();
-        $response = $router->handle($request);
+        $response = $this->router->handle($request);
         $this->assertEquals('newurl', $response->getHeader('Location'));
         $this->assertEquals(302, $response->getStatus());
     }
@@ -74,16 +94,14 @@ class ControllerTestClass extends PHPUnit_Framework_TestCase
     public function testJsonResponse()
     {
         $request = new Request(null, '/index/json');
-        $router = new ControllerRouter();
-        $response = $router->handle($request);
+        $response = $this->router->handle($request);
         $this->assertEquals('[1,2]', $response->getBody());
     }
 
     public function testJsonpResponse()
     {
         $request = new Request(null, '/index/jsonp');
-        $router = new ControllerRouter();
-        $response = $router->handle($request);
+        $response = $this->router->handle($request);
         $this->assertEquals('callback([1,2])', $response->getBody());
     }
 
@@ -93,7 +111,6 @@ class ControllerTestClass extends PHPUnit_Framework_TestCase
     public function testInvalidResponse()
     {
         $request = new Request(null, '/index/invalid');
-        $router = new ControllerRouter();
-        $response = $router->handle($request);
+        $this->router->handle($request);
     }
 }

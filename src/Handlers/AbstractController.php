@@ -6,7 +6,6 @@ use Vtk13\Mvc\Http\IRequest;
 use Vtk13\Mvc\Http\IResponse;
 use Vtk13\Mvc\Http\Response;
 use Vtk13\Mvc\Exception\RouteNotFoundException;
-use Vtk13\Mvc\Template\LayoutTemplate;
 
 class AbstractController implements IHandler
 {
@@ -18,6 +17,12 @@ class AbstractController implements IHandler
      * @var IRequest
      */
     protected $request;
+
+    /**
+     * @Inject
+     * @var \Twig_Environment
+     */
+    protected $twig;
 
     public function __construct($name)
     {
@@ -52,7 +57,7 @@ class AbstractController implements IHandler
             $action = '500';
         }
 
-        return $this->actionResultToResponse($res, $prefix, $action);
+        return $this->actionResultToResponse($res, trim("{$prefix}/{$this->name}/{$action}.twig", '/'));
     }
 
     protected function beforeHandle($action, $params)
@@ -75,37 +80,17 @@ class AbstractController implements IHandler
         }
     }
 
-    public function actionResultToResponse($result, $templatePath, $action)
+    public function actionResultToResponse($result, $template)
     {
         if ($result instanceof IResponse) {
             return $result;
         } else if (is_array($result) || is_null($result)) {
-            $view = $this->getView($templatePath, $action);
-            $view->setParams((array)$result);
-            return new Response($view->render());
+            $template = $this->twig->loadTemplate($template);
+            return new Response($template->render((array)$result));
         } else if (is_string($result)) {
             return new Response($result);
         } else {
             throw new \Exception('Invalid result type:' . gettype($result));
         }
-    }
-
-    public function getView($templatePath, $action, $layout = 'site.layout')
-    {
-        $templateReference = trim($templatePath, '/') . "/{$this->name}/{$action}";
-        return new LayoutTemplate(
-            $this->getTemplateFile($layout),
-            $this->getTemplateFile($templateReference)
-        );
-    }
-
-    public function getTemplateFile($templateReference)
-    {
-        $templateReference = trim($templateReference, '/');
-        $file = "templates/{$templateReference}.php";
-        if (($abs = stream_resolve_include_path($file))) {
-            return $abs;
-        }
-        throw new Exception("Template {$templateReference} not found");
     }
 }

@@ -1,6 +1,8 @@
 <?php
 namespace Vtk13\Mvc\Handlers;
 
+use Exception;
+use Interop\Container\ContainerInterface;
 use Vtk13\Mvc\Exception\RouteNotFoundException;
 use Vtk13\Mvc\Http\IRequest;
 
@@ -13,11 +15,21 @@ class ControllerRouter implements IHandler
      */
     protected $defaultController;
 
-    public function __construct($namespace = '', $pathPrefix = '/', $defaultController = 'index')
-    {
+    /**
+     * @var ContainerInterface
+     */
+    protected $di;
+
+    public function __construct(
+        ContainerInterface $di,
+        $namespace = '',
+        $pathPrefix = '/',
+        $defaultController = 'index'
+    ) {
         if ($namespace && substr($namespace, -1) != '\\') {
-            throw new \Exception("Namespace {$namespace} must end with '\\'");
+            throw new Exception("Namespace {$namespace} must end with '\\'");
         }
+        $this->di = $di;
         $this->namespace = $namespace;
         $this->pathPrefix = $pathPrefix;
         $this->defaultController = $defaultController;
@@ -52,7 +64,7 @@ class ControllerRouter implements IHandler
 
         $className = $namespace . $controller . 'Controller';
         if (class_exists($className)) {
-            return new $className();
+            return $this->di->get($className);
         } else {
             return null;
         }
