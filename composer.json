@@ -1,6 +1,5 @@
 {
     "name": "vtk13/mvc",
-    "version": "0.1",
     "autoload": {
         "psr-4" : {
             "Vtk13\\Mvc\\" : "src"
